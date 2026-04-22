@@ -20,6 +20,10 @@ WORKDIR /app
 # Install dependencies into a separate layer so they are cached efficiently
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# RPi.GPIO: installs on arm/v7 (Raspberry Pi), skipped gracefully on amd64.
+# The app detects availability at runtime and falls back to mock mode.
+RUN pip install --no-cache-dir --prefer-binary RPi.GPIO || \
+    echo "RPi.GPIO not available on this platform — GPIO will run in mock mode"
 
 # ── Dev stage ────────────────────────────────────────────────────────────────
 # Used by docker-compose.yml (local development)

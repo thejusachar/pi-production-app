@@ -30,6 +30,11 @@ export default function App() {
   const [newQty, setNewQty]         = useState(1)
   const [saving, setSaving]         = useState(false)
 
+  // ── LED state ────────────────────────────────────────────────────────────
+  const [ledOn, setLedOn]               = useState(false)
+  const [gpioAvailable, setGpioAvailable] = useState(null)
+  const [ledBusy, setLedBusy]           = useState(false)
+
   // ── Fetch orders ────────────────────────────────────────────────────────
   const fetchOrders = useCallback(async () => {
     try {
@@ -42,7 +47,18 @@ export default function App() {
     }
   }, [])
 
-  // ── Health check (grab version) ─────────────────────────────────────────
+  // ── Fetch LED state ──────────────────────────────────────────────────────
+  const fetchLed = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/gpio/led`)
+      if (!res.ok) return
+      const data = await res.json()
+      setLedOn(data.on)
+      setGpioAvailable(data.gpio_available)
+    } catch (_) {}
+  }, [])
+
+  // ── Health check + initial load ─────────────────────────────────────────
   useEffect(() => {
     fetch(`${API}/health`)
       .then(r => r.json())
@@ -50,7 +66,31 @@ export default function App() {
       .catch(() => {})
 
     fetchOrders().finally(() => setLoading(false))
-  }, [fetchOrders])
+    fetchLed()
+
+    // Poll LED state every 2 seconds to stay in sync with physical pin
+    const interval = setInterval(fetchLed, 2000)
+    return () => clearInterval(interval)
+  }, [fetchOrders, fetchLed])
+
+  // ── Toggle LED ───────────────────────────────────────────────────────────
+  const toggleLed = async () => {
+    setLedBusy(true)
+    try {
+      const res = await fetch(`${API}/gpio/led`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on: !ledOn }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setLedOn(data.on)
+    } catch (e) {
+      setError('Failed to control LED: ' + e.message)
+    } finally {
+      setLedBusy(false)
+    }
+  }
 
   // ── Add order ────────────────────────────────────────────────────────────
   const handleAdd = async (e) => {
@@ -113,6 +153,27 @@ export default function App() {
       </header>
 
       {error && <div className="notice error">{error}</div>}
+
+      {/* ── LED Control Card ── */}
+      <div className="led-card">
+        <div className="led-left">
+          <div className={`led-bulb ${ledOn ? 'led-on' : 'led-off'}`} />
+          <div>
+            <div className="led-title">GPIO 21 — LED</div>
+            <div className="led-status">{ledOn ? 'ON' : 'OFF'}</div>
+            {gpioAvailable === false && (
+              <div className="led-mock">⚠ Mock mode (no GPIO hardware)</div>
+            )}
+          </div>
+        </div>
+        <button
+          className={`btn-toggle ${ledOn ? 'btn-toggle-on' : 'btn-toggle-off'}`}
+          onClick={toggleLed}
+          disabled={ledBusy}
+        >
+          {ledBusy ? '…' : ledOn ? 'Turn OFF' : 'Turn ON'}
+        </button>
+      </div>
 
       {/* ── Add Order Form ── */}
       <div className="add-form">

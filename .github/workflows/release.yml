@@ -59,7 +59,7 @@ jobs:
         with:
           context: ./backend
           target: prod
-          platforms: linux/amd64,linux/arm64   # amd64=Mac/server, arm64=Pi
+          platforms: linux/amd64   # arm64 removed for now (too slow with QEMU)
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/pi-production-backend:${{ steps.version.outputs.VERSION }}
@@ -73,7 +73,7 @@ jobs:
         with:
           context: ./frontend
           target: prod
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64   # arm64 removed for now (too slow with QEMU)
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/pi-production-frontend:${{ steps.version.outputs.VERSION }}

@@ -53,7 +53,7 @@ jobs:
         with:
           context: ./backend
           target: prod
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm/v7   # arm/v7 = 32-bit Raspbian
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/pi-production-backend:${{ steps.version.outputs.VERSION }}
@@ -66,7 +66,7 @@ jobs:
         with:
           context: ./frontend
           target: prod
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm/v7   # arm/v7 = 32-bit Raspbian
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/pi-production-frontend:${{ steps.version.outputs.VERSION }}

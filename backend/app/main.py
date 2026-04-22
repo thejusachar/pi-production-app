@@ -6,7 +6,7 @@ A simple manufacturing production order management API.
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from enum import Enum
 import uuid
 import os

@@ -12,30 +12,47 @@ import uuid
 import os
 from datetime import datetime
 
-# ── GPIO setup ───────────────────────────────────────────────────────────────
+# ── GPIO setup (sysfs — no library required) ─────────────────────────────────
+# Linux exposes GPIO via /sys/class/gpio. Works in Docker with privileged: true.
+# Falls back to a software mock on non-Pi platforms (e.g. Mac dev environment).
 LED_PIN = 19
+_GPIO_ROOT  = "/sys/class/gpio"
+_PIN_PATH   = f"{_GPIO_ROOT}/gpio{LED_PIN}"
+_mock_state = False
 
-try:
-    import RPi.GPIO as GPIO
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(LED_PIN, GPIO.OUT, initial=GPIO.LOW)
-    GPIO_AVAILABLE = True
-except (ImportError, RuntimeError):
-    # Not running on a Pi (e.g. Mac dev environment) — use software mock
-    GPIO_AVAILABLE = False
-    _mock_led_state = False
+def _gpio_init() -> bool:
+    """Export pin and set direction to output. Returns True if successful."""
+    try:
+        if not os.path.exists(_PIN_PATH):
+            with open(f"{_GPIO_ROOT}/export", "w") as f:
+                f.write(str(LED_PIN))
+        with open(f"{_PIN_PATH}/direction", "w") as f:
+            f.write("out")
+        return True
+    except OSError:
+        return False
+
+GPIO_AVAILABLE = _gpio_init()
 
 def _get_led() -> bool:
     if GPIO_AVAILABLE:
-        return bool(GPIO.input(LED_PIN))
-    return _mock_led_state
+        try:
+            with open(f"{_PIN_PATH}/value", "r") as f:
+                return f.read().strip() == "1"
+        except OSError:
+            pass
+    return _mock_state
 
 def _set_led(on: bool):
-    global _mock_led_state
+    global _mock_state
     if GPIO_AVAILABLE:
-        GPIO.output(LED_PIN, GPIO.HIGH if on else GPIO.LOW)
-    else:
-        _mock_led_state = on
+        try:
+            with open(f"{_PIN_PATH}/value", "w") as f:
+                f.write("1" if on else "0")
+            return
+        except OSError:
+            pass
+    _mock_state = on
 
 # ── App setup ───────────────────────────────────────────────────────────────
 app = FastAPI(

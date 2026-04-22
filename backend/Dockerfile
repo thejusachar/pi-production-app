@@ -20,10 +20,6 @@ WORKDIR /app
 # Install dependencies into a separate layer so they are cached efficiently
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# RPi.GPIO: installs on arm/v7 (Raspberry Pi), skipped gracefully on amd64.
-# The app detects availability at runtime and falls back to mock mode.
-RUN pip install --no-cache-dir --prefer-binary RPi.GPIO || \
-    echo "RPi.GPIO not available on this platform — GPIO will run in mock mode"
 
 # ── Dev stage ────────────────────────────────────────────────────────────────
 # Used by docker-compose.yml (local development)
@@ -41,14 +37,10 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload
 
 # ── Prod stage ───────────────────────────────────────────────────────────────
 # Used for production builds and Raspberry Pi deployment
-# • No --reload; runs as a non-root user for security
+# • No --reload; runs as root so it can write to /sys/class/gpio (GPIO control)
 FROM base AS prod
 
-# Create a non-root user
-RUN useradd --create-home appuser
-USER appuser
-
-COPY --chown=appuser:appuser app/ ./app/
+COPY app/ ./app/
 
 EXPOSE 8000
 

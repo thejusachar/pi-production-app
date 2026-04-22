@@ -17,6 +17,10 @@ services:
     restart: unless-stopped
     environment:
       APP_VERSION: "${IMAGE_TAG:-latest}"
+    # Grant access to Pi GPIO hardware
+    privileged: true
+    devices:
+      - /dev/gpiomem:/dev/gpiomem
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 15s

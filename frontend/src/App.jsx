@@ -32,6 +32,7 @@ export default function App() {
 
   // ── LED state ────────────────────────────────────────────────────────────
   const [ledOn, setLedOn]               = useState(false)
+  const [ledPin, setLedPin]             = useState(19)
   const [gpioAvailable, setGpioAvailable] = useState(null)
   const [ledBusy, setLedBusy]           = useState(false)
 
@@ -54,6 +55,7 @@ export default function App() {
       if (!res.ok) return
       const data = await res.json()
       setLedOn(data.on)
+      setLedPin(data.pin)
       setGpioAvailable(data.gpio_available)
     } catch (_) {}
   }, [])
@@ -159,7 +161,7 @@ export default function App() {
         <div className="led-left">
           <div className={`led-bulb ${ledOn ? 'led-on' : 'led-off'}`} />
           <div>
-            <div className="led-title">GPIO 21 — LED</div>
+            <div className="led-title">GPIO {ledPin} — LED</div>
             <div className="led-status">{ledOn ? 'ON' : 'OFF'}</div>
             {gpioAvailable === false && (
               <div className="led-mock">⚠ Mock mode (no GPIO hardware)</div>

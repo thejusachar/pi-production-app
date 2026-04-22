@@ -96,6 +96,6 @@ jobs:
 
       - name: Verify deployment
         run: |
-          sleep 5
-          curl -f http://localhost:8000/api/health
+          sleep 10
+          curl -f http://localhost/api/health
           echo "Deployed version ${{ needs.build-push.outputs.version }} successfully"

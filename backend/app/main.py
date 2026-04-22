@@ -12,6 +12,31 @@ import uuid
 import os
 from datetime import datetime
 
+# ── GPIO setup ───────────────────────────────────────────────────────────────
+LED_PIN = 19
+
+try:
+    import RPi.GPIO as GPIO
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(LED_PIN, GPIO.OUT, initial=GPIO.LOW)
+    GPIO_AVAILABLE = True
+except (ImportError, RuntimeError):
+    # Not running on a Pi (e.g. Mac dev environment) — use software mock
+    GPIO_AVAILABLE = False
+    _mock_led_state = False
+
+def _get_led() -> bool:
+    if GPIO_AVAILABLE:
+        return bool(GPIO.input(LED_PIN))
+    return _mock_led_state
+
+def _set_led(on: bool):
+    global _mock_led_state
+    if GPIO_AVAILABLE:
+        GPIO.output(LED_PIN, GPIO.HIGH if on else GPIO.LOW)
+    else:
+        _mock_led_state = on
+
 # ── App setup ───────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Production Order Tracker",
@@ -46,6 +71,9 @@ class Order(BaseModel):
     quantity: int
     status: OrderStatus
     created_at: str
+
+class LEDControl(BaseModel):
+    on: bool
 
 # ── In-memory "database" ─────────────────────────────────────────────────────
 # NOTE: Data resets on container restart.
@@ -120,3 +148,24 @@ def delete_order(order_id: str):
     orders = [o for o in orders if o.id != order_id]
     if len(orders) == original_len:
         raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+
+# ── GPIO routes ──────────────────────────────────────────────────────────────
+
+@app.get("/api/gpio/led")
+def get_led():
+    """Read the current state of the LED on GPIO pin 21."""
+    return {
+        "pin": LED_PIN,
+        "on": _get_led(),
+        "gpio_available": GPIO_AVAILABLE,
+    }
+
+@app.post("/api/gpio/led")
+def control_led(payload: LEDControl):
+    """Turn the LED on (true) or off (false)."""
+    _set_led(payload.on)
+    return {
+        "pin": LED_PIN,
+        "on": _get_led(),
+        "gpio_available": GPIO_AVAILABLE,
+    }

@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Install dependencies into a separate layer so they are cached efficiently
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Dev stage ────────────────────────────────────────────────────────────────
 # Used by docker-compose.yml (local development)

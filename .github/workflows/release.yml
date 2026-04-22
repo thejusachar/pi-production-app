@@ -1,0 +1,106 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  release.yml  —  Build, Push, and Deploy on Version Tag
+#
+#  Triggered when you push a Git tag like:  v1.2.3
+#
+#  What it does:
+#    1. Builds multi-platform Docker images (amd64 for Mac, arm64 for Pi)
+#    2. Pushes them to Docker Hub with the version tag AND "latest"
+#    3. SSHs into the Raspberry Pi and does a zero-downtime rolling update
+#
+#  Required GitHub Secrets (Settings → Secrets → Actions):
+#    DOCKER_HUB_USERNAME  →  your Docker Hub username
+#    DOCKER_HUB_TOKEN     →  Docker Hub access token (not your password)
+#    PI_HOST              →  IP or hostname of your Raspberry Pi
+#    PI_USER              →  SSH username on the Pi (e.g. "pi")
+#    PI_SSH_KEY           →  Private SSH key (the Pi must have the public key)
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: Release & Deploy
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"   # matches v1.0.0, v2.3.1, etc.
+
+jobs:
+  release:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Extract version from tag (strips leading "v") ─────────────────
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        # e.g. tag "v1.2.3" → VERSION="1.2.3"
+
+      # ── 3. Multi-platform build support ─────────────────────────────────
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── 4. Log in to Docker Hub ──────────────────────────────────────────
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      # ── 5. Build & push backend ──────────────────────────────────────────
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          target: prod
+          platforms: linux/amd64,linux/arm64   # amd64=Mac/server, arm64=Pi
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/pi-production-backend:${{ steps.version.outputs.VERSION }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/pi-production-backend:latest
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.VERSION }}
+
+      # ── 6. Build & push frontend ─────────────────────────────────────────
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          target: prod
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/pi-production-frontend:${{ steps.version.outputs.VERSION }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/pi-production-frontend:latest
+
+      # ── 7. Deploy to Raspberry Pi via SSH ────────────────────────────────
+      - name: Deploy to Raspberry Pi
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.PI_HOST }}
+          username: ${{ secrets.PI_USER }}
+          key:      ${{ secrets.PI_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/pi-production-app
+
+            # Update the .env with new image tag
+            echo "IMAGE_TAG=${{ steps.version.outputs.VERSION }}"           > .env
+            echo "DOCKER_HUB_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}"  >> .env
+
+            # Pull new images (works for both amd64 and arm64 automatically)
+            docker compose -f docker-compose.prod.yml pull
+
+            # Rolling restart (backend first, then frontend)
+            docker compose -f docker-compose.prod.yml up -d --no-build
+
+            # Remove old/unused images to save disk space on the Pi
+            docker image prune -f
+
+            echo "✅ Deployed version ${{ steps.version.outputs.VERSION }} successfully"
